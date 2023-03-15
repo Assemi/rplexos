@@ -64,17 +64,17 @@ process_solution <- function(file, keep.temp = FALSE) {
               "  Reduce number of outputs in PLEXOS or process with the 64-bit Windows version of R.\n",
               "  No need to report this message; we are working on a solution.",
               call. = FALSE, immediate. = TRUE)
-
+      
       return(invisible(""))
     }
   }
-
+  
   # Read content from the XML file
   xml.content <- try(read_file_in_zip(file, xml.pos), silent = !is_debug_rplexos())
   if (inherits(xml.content, "try-error")) {
     stop("Error reading XML file into memory", call. = FALSE)
   }
-
+  
   # Check that XML is a valid PLEXOS file
   plexos.check <- grep("SolutionDataset", xml.content[1])
   if (length(plexos.check) == 0L) {
@@ -82,156 +82,156 @@ process_solution <- function(file, keep.temp = FALSE) {
     warning(file, " is not a PLEXOS database and was ignored.", call. = FALSE, immediate. = TRUE)
     return(invisible(""))
   }
-
+  
   # Create an empty database and add the XML information
   rplexos_message("  - Solution: '", file, "'", sep = "")
-
+  
   # Open connection to SQLite for R
   dbt <- DBI::dbConnect(RSQLite::SQLite(), dbname = db.temp, create = TRUE)
   # dbt <- src_sqlite(db.temp, create = TRUE)
-
+  
   # Add basic XML structure and delete cached XML file
   new_database(dbt, xml.content)
   rm(xml.content)
-
+  
   # Add a few tables that will be useful later on
   add_extra_tables(dbt)
-
+  
   # Create SQLite database to store final results
   rplexos_message("Creating final database and adding basic data")
   dbf <- DBI::dbConnect(RSQLite::SQLite(), dbname = db.name, create = TRUE)
   # dbf <- src_sqlite(db.name, create = TRUE)
-
+  
   # Store time stamps
   sql <- "CREATE TABLE data_time (phase_id INT, interval INT, time TEXT)"
   DBI::dbExecute(dbf, sql)
   sql <- "CREATE VIEW time AS
-          SELECT phase_id, interval, datetime(time) time
-          FROM data_time"
+        SELECT phase_id, interval, datetime(time) time
+        FROM data_time"
   DBI::dbExecute(dbf, sql)
-
+  
   # Turn PRAGMA OFF
   DBI::dbExecute(dbf, "PRAGMA synchronous = OFF")
   DBI::dbExecute(dbf, "PRAGMA journal_mode = MEMORY")
   DBI::dbExecute(dbf, "PRAGMA temp_store = MEMORY")
-
+  
   # Attach final database to temporary database
   DBI::dbExecute(dbt, sprintf("ATTACH '%s' AS new", db.name))
-
+  
   # Add config table
   DBI::dbExecute(dbt, "CREATE TABLE new.config AS SELECT * FROM t_config")
   sql <- sprintf("INSERT INTO new.config VALUES ('rplexos', '%s')", packageVersion("rplexos"))
   DBI::dbExecute(dbt, sql)
   sql <- sprintf("INSERT INTO new.config VALUES ('OTF', '%s')", is_otf_rplexos())
   DBI::dbExecute(dbt, sql)
-
+  
   # Add time data
   sql <- "INSERT INTO new.data_time
-          SELECT phase_id, interval_id, time
-          FROM temp_period_0"
+        SELECT phase_id, interval_id, time
+        FROM temp_period_0"
   DBI::dbExecute(dbt, sql)
-
+  
   # Collate information to key (first period data, then summary data)
   sql <- "CREATE TABLE new.key (key INT PRIMARY KEY,
-                                table_name TEXT,
-                                collection TEXT,
-                                property TEXT,
-                                unit TEXT,
-                                name TEXT,
-                                parent TEXT,
-                                category TEXT,
-                                region TEXT,
-                                zone TEXT,
-                                class TEXT,
-                                class_group TEXT,
-                                phase_id INT,
-                                period_type_id INT,
-                                timeslice TEXT,
-                                band INT,
-                                sample TEXT)"
+                              table_name TEXT,
+                              collection TEXT,
+                              property TEXT,
+                              unit TEXT,
+                              name TEXT,
+                              parent TEXT,
+                              category TEXT,
+                              region TEXT,
+                              zone TEXT,
+                              class TEXT,
+                              class_group TEXT,
+                              phase_id INT,
+                              period_type_id INT,
+                              timeslice TEXT,
+                              band INT,
+                              sample TEXT)"
   DBI::dbExecute(dbt, sql)
-
+  
   sql <- "INSERT INTO new.key
-          SELECT *
-          FROM temp_key"
+        SELECT *
+        FROM temp_key"
   DBI::dbExecute(dbt, sql)
-
+  
   # Detach database
   DBI::dbExecute(dbt, "DETACH new");
-
+  
   # Define columns from the key table that go into the views
   view.k <- paste0("k.", c("key", "collection", "property", "unit", "name", "parent", "category",
-                            "region", "zone", "phase_id", "period_type_id", "timeslice",
-                            "band", "sample"))
+                           "region", "zone", "phase_id", "period_type_id", "timeslice",
+                           "band", "sample"))
   view.k2 <- paste(view.k, collapse = ", ")
-
+  
   # For each summary time, create a table and a view
   rplexos_message("Creating data tables and views")
   times <- get_times()
   for (i in times) {
     sql <- sprintf("CREATE TABLE data_%s (key integer, time real, value double)", i);
     DBI::dbExecute(dbf, sql)
-
+    
     sql <- sprintf("CREATE VIEW %s AS
-                    SELECT %s, datetime(d.time) AS time, d.value
-                    FROM data_%s d NATURAL LEFT JOIN key k ", i, view.k2, i);
+                  SELECT %s, datetime(d.time) AS time, d.value
+                  FROM data_%s d NATURAL LEFT JOIN key k ", i, view.k2, i);
     DBI::dbExecute(dbf, sql)
   }
-
+  
   # Create interval data tables and views
   sql <- "SELECT DISTINCT table_name
-          FROM key
-          WHERE period_type_id = 0"
+        FROM key
+        WHERE period_type_id = 0"
   props <- DBI::dbGetQuery(dbf, sql)
   
   for (p in props$table_name) {
     sql <- sprintf("CREATE TABLE '%s' (key INT, time_from INT, time_to INT, value DOUBLE)", p)
     DBI::dbExecute(dbf, sql)
-
+    
     view.name <- gsub("data_interval_", "", p)
     sql <- sprintf("CREATE VIEW %s AS
-                    SELECT %s, t1.time time_from, t2.time time_to, d.value
-                    FROM %s d
-                    NATURAL JOIN key k
-                    JOIN time t1
-                      ON t1.interval = d.time_from
-                     AND t1.phase_id = k.phase_id
-                    JOIN time t2
-                      ON t2.interval = d.time_to
-                     AND t2.phase_id = k.phase_id
-                    WHERE k.table_name = '%s'", view.name, view.k2, p, p);
+                  SELECT %s, t1.time time_from, t2.time time_to, d.value
+                  FROM %s d
+                  NATURAL JOIN key k
+                  JOIN time t1
+                    ON t1.interval = d.time_from
+                   AND t1.phase_id = k.phase_id
+                  JOIN time t2
+                    ON t2.interval = d.time_to
+                   AND t2.phase_id = k.phase_id
+                  WHERE k.table_name = '%s'", view.name, view.k2, p, p);
     DBI::dbExecute(dbf, sql)
   }
-
+  
   # Create table for list of properties
   sql <- "CREATE TABLE property AS
-          SELECT DISTINCT class_group,
-                          class,
-                          collection,
-                          property,
-                          unit,
-                          phase_id,
-                          period_type_id AS is_summary,
-                          table_name,
-                          COUNT(DISTINCT band) AS count_band,
-                          COUNT(DISTINCT sample) AS count_sample,
-                          COUNT(DISTINCT timeslice) AS count_timeslice
-          FROM key
-          GROUP BY class_group, class, collection, property, unit, phase_id, period_type_id, table_name
-          ORDER BY phase_id, period_type_id, class_group, class, collection, property"
+        SELECT DISTINCT class_group,
+                        class,
+                        collection,
+                        property,
+                        unit,
+                        phase_id,
+                        period_type_id AS is_summary,
+                        table_name,
+                        COUNT(DISTINCT band) AS count_band,
+                        COUNT(DISTINCT sample) AS count_sample,
+                        COUNT(DISTINCT timeslice) AS count_timeslice
+        FROM key
+        GROUP BY class_group, class, collection, property, unit, phase_id, period_type_id, table_name
+        ORDER BY phase_id, period_type_id, class_group, class, collection, property"
   DBI::dbExecute(dbf, sql)
   
   # Add on the fly table
   DBI::dbExecute(dbf,
                  "CREATE TABLE 'on_the_fly' (key INT, table_name TEXT)")
-
+  
   # Add the data into the db
   if (is_otf_rplexos()){
     add_data(file, dbt, dbf, add_tables = '')
   } else {
     add_data(file, dbt, dbf, add_tables = 'add_all')
   }
-
+  
   # Read Log file into memory
   rplexos_message("Reading and processing log file")
   log.content <- try(read_file_in_zip(file, log.pos), silent = !is_debug_rplexos())
