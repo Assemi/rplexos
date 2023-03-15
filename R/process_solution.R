@@ -4,23 +4,22 @@
 #' @importFrom utils packageVersion unzip
 #' @export
 process_solution <- function(file, keep.temp = FALSE) {
-  # keep the temp db to insert data later if processing is on the fly
   if(is_otf_rplexos()){
     keep.temp <- T
   }
   # Check that inputs are valid
   stopifnot(is.character(file), length(file) == 1L)
-
+  
   # Check that file exists
   if (!file.exists(file)) {
     warning(file, " does not exist and was ignored.", call. = FALSE, immediate. = TRUE)
     return(invisible(""))
   }
-
+  
   # Database name will match that of the zip file
   db.temp <- get_dbtemp_name(file)
   db.name <- get_dbfinal_name(file)
-
+  
   # Delete old files, if possible
   if (file.exists(db.temp)) {
     stop_ifnot_delete(db.temp)
@@ -28,10 +27,10 @@ process_solution <- function(file, keep.temp = FALSE) {
   if (file.exists(db.name)) {
     stop_ifnot_delete(db.name)
   }
-
+  
   # Read list of files in the zip file
   zip.content <- unzip(file, list = TRUE)
-
+  
   # Check that zip file has valid XML, Log and BIN files
   xml.pos <- grep("^Model.*Solution[ _0-9()]*[.]xml$", zip.content$Name)
   bin.pos <- grep("^t_data_[0-4].BIN$", zip.content$Name)
@@ -53,7 +52,7 @@ process_solution <- function(file, keep.temp = FALSE) {
       warning(file, " is potentially not a PLEXOS solution file because of the missing LOG file in the solution.zip. It will be treated anyway.", call. = FALSE, immediate. = TRUE)
     }
   }
-
+  
   # Check if the interval binary file is not being read correctly within the zip file
   #   This seems to happen when R is using 32-bit versions of the zip libraries
   #   No clear solution as to how to solve this yet
@@ -244,25 +243,25 @@ process_solution <- function(file, keep.temp = FALSE) {
   } else {
     # Success reading file, try to parse it
     log.result <- plexos_log_parser(log.content)
-
+    
     if (length(log.result) < 2L) {
       warning("Log in solution '", file, "' did not parse correctly.\n",
               "    Data parsed correctly if no other errors were found.",
               call. = FALSE)
     }
-
+    
     for (i in names(log.result)) {
       DBI::dbWriteTable(dbf, i, log.result[[i]] %>% as.data.frame, row.names = FALSE)
     }
   }
-
+  
   # Close database connections
   DBI::dbDisconnect(dbt)
   DBI::dbDisconnect(dbf)
-
+  
   # Message that file processing is done
   rplexos_message("Finished processing file ", file, "\n")
-
+  
   # Delete temporary database
   if (!keep.temp) {
     stop_ifnot_delete(db.temp)
@@ -307,13 +306,17 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
     correct.length <- correct_length(dbt, period)
     
     # Read time data
+    # tbl(dbt, sprintf("temp_period_%s", period)) %>%
+    #   arrange(phase_id, period_id) %>%
+    #   select(phase_id, period_id, time, interval_id) %>% show_query()
+    #   # collect(n=Inf)
     t.time <- tbl(dbt, sprintf("temp_period_%s", period)) %>%
       arrange(phase_id, period_id) %>%
       select(phase_id, period_id, time, interval_id) %>%
       collect(n=Inf)
     
     # Read t_key_index entries for period data
-    sql <- sprintf("SELECT nk.[key], nk.phase_id, nk.table_name, tki.period_offset, tki.length
+    sql <- sprintf("SELECT nk.[key], nk.phase_id, nk.table_name, tki.position, tki.period_offset, tki.length
                    FROM t_key_index tki
                    JOIN temp_key nk
                    ON tki.key_id = nk.[key]
@@ -325,17 +328,23 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
     DBI::dbBegin(dbf)
     
     # Read one row from the query
-    num.rows <- ifelse(period == 0, 1, 1000)
+    num.rows <- 1##TODO: ifelse(period == 0, 1, 1000)
+    current.row <- 1
     trow <- DBI::dbFetch(tki, num.rows)
     num.read <- 0
     
     # Iterate through the query results
     byte_offset <- 0 # will be used to seek in the results when not all the data is used.
+    previousPosition <- -1
     bytes_skipped <- F # as long as this is false, readBin will be used. If bytes are skipped, read_zip() will be used. Each loop reads a new file.
     while (nrow(trow) > 0) {
+      print(paste0(current.row, ": ", paste(trow, collapse = ", ")))
+      ##TODO: byte_offset <- trow$position 
       # Fix length if necessary
-      if (!correct.length)
+      if (!correct.length){
         trow <- trow %>% mutate(length = length - period_offset)
+        print("Not correct length!")
+      }
       
       # Expand data
       tdata <- trow %>%
@@ -345,11 +354,13 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
       # Skip table if it is not present in add_tables
       if(period == 0){ # other periods will be loaded anyway
         if(all(add_tables != 'add_all')){ # only true if all the add_tables entries equal 'add_all'
-                                          # a table can never be skipped if all tables should be added
-                                          # add_tables = '' for no tables, add_tables = 'add_all' for all tables
+          # a table can never be skipped if all tables should be added
+          # add_tables = '' for no tables, add_tables = 'add_all' for all tables
           if (all(trow$table_name %out% add_tables)){ # only true if all the table names are outside of add_tables
+            print("all(add_tables != 'add_all')")
             byte_offset <- byte_offset + sum(trow$length) * 8L
             bytes_skipped <- T
+            print("bytes_skipped <- T")
             trow <- DBI::dbFetch(tki, num.rows)
             next
           }
@@ -359,12 +370,18 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
       if(!bytes_skipped){
         # Query data
         byte_offset <- byte_offset + sum(trow$length) * 8L
-        value.data <- readBin(bin.con,
-                              "double",
-                              n = nrow(tdata),
-                              size = 8L,
-                              endian = "little")
+        ##TODO: byte_offset <- trow$position
+        if(trow$position != previousPosition)
+          value.data <- readBin(bin.con,
+                                "double",
+                                n = nrow(tdata),
+                                size = 8L,
+                                endian = "little")
       }else{
+        ##TODO:
+        byte_offset = trow$position
+        print("bytes_skipped")
+        
         value.data <- read_zip(file, 
                                bin.name, 
                                what = "double", 
@@ -431,6 +448,10 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
                         VALUES($key, $table_name)",
                        trow %>% select(key, table_name) %>% as.data.frame)
       }
+      
+      ##TODO:
+      previousPosition <- trow$position
+      current.row <- current.row + 1
       
       # Read next row from the query
       trow <- DBI::dbFetch(tki, num.rows)
@@ -735,20 +756,26 @@ add_extra_tables <- function(db) {
 
 # Does t_key_index have the correct length?
 correct_length <- function(db, p) {
+  tmpTbl <- tbl(db, "t_key_index") %>%
+    filter(period_type_id == p)
+  
   res <- tbl(db, "t_key_index") %>%
     filter(period_type_id == p) %>%
+    select(position, length, period_offset) %>%
+    distinct() %>%
     summarize(JustLength            = max(position / 8 + length),
               JustLengthMinusOffset = max(position / 8 + length - period_offset),
               SumLength             = sum(length),
               SumLengthMinusOffset  = sum(length - period_offset)) %>%
+    # show_query()
     collect(n=Inf)
-
+  
   # Debug output
   rplexos_message("   Max position:           ", res$JustLength)
   rplexos_message("   Adjusted max position:  ", res$JustLengthMinusOffset)
   rplexos_message("   Sum of length:          ", res$SumLength)
   rplexos_message("   Sum of adjusted length: ", res$SumLengthMinusOffset)
-
+  
   if (res$JustLength == res$SumLength) {
     rplexos_message("   ", res$JustLength, " entries expected in t_data_", p, ".BIN")
     return(TRUE)
@@ -757,12 +784,12 @@ correct_length <- function(db, p) {
     rplexos_message("   ", res$JustLengthMinusOffset, " entries expected in t_data_", p, ".BIN")
     return(FALSE)
   }
-
+  
   # This case is
   warning("Problem with length of 't_key_index' for period ", p, "\n",
-          "in file '", db$path, "'",
+          "in file '", 'db$path', "'",
           call. = FALSE, immediate. = TRUE)
-
+  
   TRUE
 }
 
