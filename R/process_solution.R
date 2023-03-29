@@ -3,7 +3,8 @@
 #' @useDynLib rplexos
 #' @importFrom utils packageVersion unzip
 #' @export
-process_solution <- function(file, keep.temp = FALSE) {
+process_solution <- function(file, keep.temp = FALSE,
+                             periods = c(0:4), table_names = c("data_interval_Battery_AvailableSoC", "data_interval_Battery_Charging", "data_interval_Battery_Discharging", "data_interval_Battery_Energy", "data_interval_Battery_FOMCost", "data_interval_Battery_Generation", "data_interval_Battery_InstalledCapacity", "data_interval_Battery_Load", "data_interval_Battery_Losses", "data_interval_Battery_NetGeneration", "data_interval_Battery_SoC", "data_interval_Battery_VOMCost", "data_interval_Constraint_Activity", "data_interval_Constraint_HoursBinding", "data_interval_Constraint_PenaltyCost", "data_interval_Constraint_Price", "data_interval_Constraint_RHS", "data_interval_Constraint_Slack", "data_interval_Constraint_Violation", "data_interval_Emission_Production", "data_interval_EmissionGenerators_GenerationProduction", "data_interval_EmissionGenerators_UnitStartProduction", "data_interval_Fuel_Offtake", "data_interval_Fuel_TotalPrice", "data_interval_Generator_AvailableCapacity", "data_interval_Generator_AvailableEnergy", "data_interval_Generator_CapacityCurtailed", "data_interval_Generator_CapacityFactor", "data_interval_Generator_CurtailmentFactor", "data_interval_Generator_EnergyCurtailed", "data_interval_Generator_FuelOfftake", "data_interval_Generator_Generation", "data_interval_Generator_GenerationSentOut", "data_interval_Generator_HoursCurtailed", "data_interval_Generator_InstalledCapacity", "data_interval_Generator_MarginalLossFactor", "data_interval_Generator_MaxCapacity", "data_interval_Generator_NetGeneration", "data_interval_Generator_OfferPrice", "data_interval_Generator_OfferQuantity", "data_interval_Generator_PriceReceived", "data_interval_Generator_PumpLoad", "data_interval_Generator_RatedCapacity", "data_interval_Generator_Rating", "data_interval_Generator_SRMC", "data_interval_Generator_ServiceFactor", "data_interval_Generator_StartFuelOfftake", "data_interval_Generator_Units", "data_interval_Generator_VOMCost", "data_interval_GeneratorFuels_Offtake", "data_interval_GeneratorFuels_Price", "data_interval_Line_ExportLimit", "data_interval_Line_Flow", "data_interval_Line_FlowBack", "data_interval_Line_ImportLimit", "data_interval_Line_Loss", "data_interval_Line_NetFlow", "data_interval_Region_BatteryGeneration", "data_interval_Region_BatteryLoad", "data_interval_Region_DemandCurtailed", "data_interval_Region_DumpEnergy", "data_interval_Region_Exports", "data_interval_Region_Generation", "data_interval_Region_GenerationSentOut", "data_interval_Region_GeneratorAuxiliaryUse", "data_interval_Region_Imports", "data_interval_Region_Load", "data_interval_Region_NetGeneration", "data_interval_Region_NetInterchange", "data_interval_Region_PeakLoad", "data_interval_Region_Price", "data_interval_Region_PumpGeneration", "data_interval_Region_PumpLoad", "data_interval_Region_TransmissionLosses", "data_interval_Region_UnservedEnergy", "data_interval_Region_z")) {
   if(is_otf_rplexos()){
     keep.temp <- T
   }
@@ -229,7 +230,7 @@ process_solution <- function(file, keep.temp = FALSE) {
   if (is_otf_rplexos()){
     add_data(file, dbt, dbf, add_tables = '')
   } else {
-    add_data(file, dbt, dbf, add_tables = 'add_all')
+    add_data(file, dbt, dbf, add_tables = 'add_all', periods = periods, table_names = table_names)
   }
   
   # Read Log file into memory
@@ -271,7 +272,8 @@ process_solution <- function(file, keep.temp = FALSE) {
   invisible(db.name)
 }
 
-add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T){
+add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T,
+                     priods = c(0:4), table_names = c("data_interval_Battery_AvailableSoC", "data_interval_Battery_Charging", "data_interval_Battery_Discharging", "data_interval_Battery_Energy", "data_interval_Battery_FOMCost", "data_interval_Battery_Generation", "data_interval_Battery_InstalledCapacity", "data_interval_Battery_Load", "data_interval_Battery_Losses", "data_interval_Battery_NetGeneration", "data_interval_Battery_SoC", "data_interval_Battery_VOMCost", "data_interval_Constraint_Activity", "data_interval_Constraint_HoursBinding", "data_interval_Constraint_PenaltyCost", "data_interval_Constraint_Price", "data_interval_Constraint_RHS", "data_interval_Constraint_Slack", "data_interval_Constraint_Violation", "data_interval_Emission_Production", "data_interval_EmissionGenerators_GenerationProduction", "data_interval_EmissionGenerators_UnitStartProduction", "data_interval_Fuel_Offtake", "data_interval_Fuel_TotalPrice", "data_interval_Generator_AvailableCapacity", "data_interval_Generator_AvailableEnergy", "data_interval_Generator_CapacityCurtailed", "data_interval_Generator_CapacityFactor", "data_interval_Generator_CurtailmentFactor", "data_interval_Generator_EnergyCurtailed", "data_interval_Generator_FuelOfftake", "data_interval_Generator_Generation", "data_interval_Generator_GenerationSentOut", "data_interval_Generator_HoursCurtailed", "data_interval_Generator_InstalledCapacity", "data_interval_Generator_MarginalLossFactor", "data_interval_Generator_MaxCapacity", "data_interval_Generator_NetGeneration", "data_interval_Generator_OfferPrice", "data_interval_Generator_OfferQuantity", "data_interval_Generator_PriceReceived", "data_interval_Generator_PumpLoad", "data_interval_Generator_RatedCapacity", "data_interval_Generator_Rating", "data_interval_Generator_SRMC", "data_interval_Generator_ServiceFactor", "data_interval_Generator_StartFuelOfftake", "data_interval_Generator_Units", "data_interval_Generator_VOMCost", "data_interval_GeneratorFuels_Offtake", "data_interval_GeneratorFuels_Price", "data_interval_Line_ExportLimit", "data_interval_Line_Flow", "data_interval_Line_FlowBack", "data_interval_Line_ImportLimit", "data_interval_Line_Loss", "data_interval_Line_NetFlow", "data_interval_Region_BatteryGeneration", "data_interval_Region_BatteryLoad", "data_interval_Region_DemandCurtailed", "data_interval_Region_DumpEnergy", "data_interval_Region_Exports", "data_interval_Region_Generation", "data_interval_Region_GenerationSentOut", "data_interval_Region_GeneratorAuxiliaryUse", "data_interval_Region_Imports", "data_interval_Region_Load", "data_interval_Region_NetGeneration", "data_interval_Region_NetInterchange", "data_interval_Region_PeakLoad", "data_interval_Region_Price", "data_interval_Region_PumpGeneration", "data_interval_Region_PumpLoad", "data_interval_Region_TransmissionLosses", "data_interval_Region_UnservedEnergy", "data_interval_Region_z")){
   if(is.null(dbt) | is.null(dbf)){
     # Database name will match that of the zip file
     db.temp <- get_dbtemp_name(file)
@@ -317,19 +319,19 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
     
     # Read t_key_index entries for period data
     sql <- sprintf("SELECT nk.[key], nk.phase_id, nk.table_name, tki.position, tki.period_offset, tki.length
-                   FROM t_key_index tki
-                   JOIN temp_key nk
-                   ON tki.key_id = nk.[key]
-                   WHERE tki.period_type_id = %s
-                   ORDER BY tki.position", period)
+                 FROM t_key_index tki
+                 JOIN temp_key nk
+                 ON tki.key_id = nk.[key]
+                 WHERE tki.period_type_id = %s
+                 ORDER BY tki.position", period)
     tki <- DBI::dbSendQuery(dbt, sql)
     
     # All the data is inserted in one transaction
     DBI::dbBegin(dbf)
     
     # Read one row from the query
-    num.rows <- 1##TODO: ifelse(period == 0, 1, 1000)
-    current.row <- 1
+    num.rows <- -1 ##TODO: Fetching all rows #instead of: ifelse(period == 0, 1, 1000)
+    ##TODO: Not needed anymore: current.row <- 1
     trow <- DBI::dbFetch(tki, num.rows)
     num.read <- 0
     
@@ -337,124 +339,145 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
     byte_offset <- 0 # will be used to seek in the results when not all the data is used.
     previousPosition <- -1
     bytes_skipped <- F # as long as this is false, readBin will be used. If bytes are skipped, read_zip() will be used. Each loop reads a new file.
-    while (nrow(trow) > 0) {
-      print(paste0(current.row, ": ", paste(trow, collapse = ", ")))
-      ##TODO: byte_offset <- trow$position 
-      # Fix length if necessary
+    if (nrow(trow) > 0) {
+      ##TODO: print(paste0(current.row, ": ", paste(trow, collapse = ", ")))
+      ##TODO: Updated: byte_offset <- trow$position 
+      ##TODO: Not sure about this: Fix length if necessary
       if (!correct.length){
         trow <- trow %>% mutate(length = length - period_offset)
         print("Not correct length!")
       }
       
-      # Expand data
-      tdata <- trow %>%
-        select(key_id = key, phase_id, period_offset, length) %>%
-        expand_tkey
       
-      # Skip table if it is not present in add_tables
-      if(period == 0){ # other periods will be loaded anyway
-        if(all(add_tables != 'add_all')){ # only true if all the add_tables entries equal 'add_all'
-          # a table can never be skipped if all tables should be added
-          # add_tables = '' for no tables, add_tables = 'add_all' for all tables
-          if (all(trow$table_name %out% add_tables)){ # only true if all the table names are outside of add_tables
-            print("all(add_tables != 'add_all')")
-            byte_offset <- byte_offset + sum(trow$length) * 8L
-            bytes_skipped <- T
-            print("bytes_skipped <- T")
-            trow <- DBI::dbFetch(tki, num.rows)
-            next
+      
+      
+      
+      for(i in 1:nrow(trow)){
+        
+        print(i)
+        
+        
+        # Expand data
+        tdata <- trow[i, ] %>%
+          select(key_id = key, phase_id, period_offset, length) %>%
+          expand_tkey
+        
+        # Skip table if it is not present in add_tables
+        if(period == 0){ # other periods will be loaded anyway
+          if(all(add_tables != 'add_all')){ ##TODO: Not sure about this: # only true if all the add_tables entries equal 'add_all'
+            # a table can never be skipped if all tables should be added
+            # add_tables = '' for no tables, add_tables = 'add_all' for all tables
+            if (all(trow$table_name[i] %out% add_tables)){ # only true if all the table names are outside of add_tables
+              print("all(add_tables != 'add_all')")
+              byte_offset <- byte_offset + sum(trow$length[i]) * 8L
+              bytes_skipped <- T
+              print("bytes_skipped <- T")
+              ###TODO: Not needed anymore: trow <- DBI::dbFetch(tki, num.rows)
+              next
+            }
           }
         }
-      }
-      
-      if(!bytes_skipped){
-        # Query data
-        byte_offset <- byte_offset + sum(trow$length) * 8L
-        ##TODO: byte_offset <- trow$position
-        if(trow$position != previousPosition)
-          value.data <- readBin(bin.con,
-                                "double",
-                                n = nrow(tdata),
-                                size = 8L,
-                                endian = "little")
-      }else{
-        ##TODO:
-        byte_offset = trow$position
-        print("bytes_skipped")
         
-        value.data <- read_zip(file, 
-                               bin.name, 
-                               what = "double", 
-                               offset = byte_offset, 
-                               n = nrow(tdata), 
-                               size = 8L, 
-                               endian = "little")
-        byte_offset <- byte_offset + sum(trow$length) * 8L
-      }
-      num.read <- num.read + length(value.data)
-      
-      # Check the size of data (they won't match if there is a problem)
-      if (length(value.data) < nrow(tdata)) {
-        rplexos_message("   ", num.read, " values read")
-        stop("Problem reading ", period.name, " binary data (reached end of file).\n",
-             "  ", nrow(tdata), " values requested, ", length(value.data), " returned.\n",
-             "  This is likely a bug in rplexos. Please report it.", call. = FALSE)
-      }
-      
-      # Copy data
-      tdata$value <- value.data
-      
-      # Join with time
-      tdata2 <- tdata %>%
-        inner_join(t.time, by = c("phase_id", "period_id"))
-      
-      # Add data to SQLite
-      if (period > 0) {
-        tdata3 <- tdata2 %>% select(key, time, value)
-        table_otf <- paste0('data_',times[period],gsub('data_interval','',trow$table_name))
-        table_otf <- paste0('data_',times[period])
-        # tables_otf_done <- collect(tbl(dbf, 'on_the_fly'), n = Inf)
-        # 
-        # if(!(table_otf %in% tables_otf_done$table_name)){
-        if(initial){
+        if(!bytes_skipped){
+          # Query data
+          byte_offset <- byte_offset + sum(trow$length[i]) * 8L
+          ##TODO: byte_offset <- trow$position
+          if(trow$position[i] != previousPosition)
+            value.data <- readBin(bin.con,
+                                  "double",
+                                  n = nrow(tdata[tdata$key == trow$key[i], ]),
+                                  size = 8L,
+                                  endian = "little")
+        }else{
+          ##TODO:
+          byte_offset = trow$position[i]
+          print("bytes_skipped")
           
-          DBI::dbExecute(dbf,
-                         sprintf("INSERT INTO data_%s VALUES($key, $time, $value)", times[period]),
-                         tdata3 %>% as.data.frame)
-          
-          table_data <- trow %>% select(key, table_name) %>% as.data.frame
-          table_data$table_name <- table_otf
-          DBI::dbExecute(dbf,
-                         "INSERT INTO on_the_fly (key, table_name)
-                          VALUES($key, $table_name)",
-                         table_data)
+          value.data <- read_zip(file, 
+                                 bin.name, 
+                                 what = "double", 
+                                 offset = byte_offset, 
+                                 n = nrow(tdata[tdata$key == trow$key[i], ]),
+                                 size = 8L, 
+                                 endian = "little")
+          byte_offset <- byte_offset + sum(trow$length) * 8L
         }
-      } else {
-        # Eliminate consecutive repeats
-        default.interval.to.id <- max(tdata2$interval_id)
-        tdata3 <- tdata2 %>%
-          arrange(interval_id) %>%
-          filter(value != lag(value, default = Inf)) %>%
-          mutate(interval_to_id = lead(interval_id - 1, default = default.interval.to.id)) %>%
-          select(key, time_from = interval_id, time_to = interval_to_id, value)
+        num.read <- num.read + length(value.data)
         
-        DBI::dbExecute(dbf,
-                       sprintf("INSERT INTO %s (key, time_from, time_to, value)
-                             VALUES($key, $time_from, $time_to, $value)", trow$table_name),
-                       tdata3 %>% as.data.frame)
+        # Check the size of data (they won't match if there is a problem)
+        if (length(value.data) < nrow(tdata[tdata$key == trow$key[i], ])) {
+          rplexos_message("   ", num.read, " values read")
+          stop("Problem reading ", period.name, " binary data (reached end of file).\n",
+               "  ", nrow(tdata[tdata$key == trow$key[i], ]), 
+               " values requested, ", length(value.data), " returned.\n",
+               "  This is likely a bug in rplexos. Please report it.", call. = FALSE)
+        }
         
-        DBI::dbExecute(dbf,
-                       "INSERT INTO on_the_fly (key, table_name)
-                        VALUES($key, $table_name)",
-                       trow %>% select(key, table_name) %>% as.data.frame)
+        # Copy data
+        tdata$value[tdata$key == trow$key[i]] <- value.data
+        
+        # Join with time
+        tdata2 <- tdata %>%
+          inner_join(t.time, by = c("phase_id", "period_id"))
+        
+        # Add data to SQLite if table is selected for export
+        if(trow$table_name[i] %in% table_names){
+          if (period > 0) {
+            tdata3 <- tdata2 %>% select(key, time, value)
+            table_otf <- paste0('data_',times[period],gsub('data_interval','',trow$table_name[i]))
+            table_otf <- paste0('data_',times[period])
+            # tables_otf_done <- collect(tbl(dbf, 'on_the_fly'), n = Inf)
+            # 
+            # if(!(table_otf %in% tables_otf_done$table_name)){
+            if(initial){
+              
+              DBI::dbExecute(dbf,
+                             sprintf("INSERT INTO data_%s VALUES($key, $time, $value)", times[period]),
+                             tdata3 %>% as.data.frame)
+              
+              table_data <- trow %>% select(key, table_name) %>% as.data.frame
+              table_data$table_name <- table_otf
+              DBI::dbExecute(dbf,
+                             "INSERT INTO on_the_fly (key, table_name)
+                            VALUES($key, $table_name)",
+                             table_data)
+            }
+          } else {
+            # Eliminate consecutive repeats
+            default.interval.to.id <- max(tdata2$interval_id)
+            tdata3 <- tdata2 %>%
+              arrange(interval_id) %>%
+              filter(value != lag(value, default = Inf)) %>%
+              mutate(interval_to_id = lead(interval_id - 1, default = default.interval.to.id)) %>%
+              select(key, time_from = interval_id, time_to = interval_to_id, value)
+            
+            DBI::dbExecute(dbf,
+                           sprintf("INSERT INTO %s (key, time_from, time_to, value)
+                               VALUES($key, $time_from, $time_to, $value)", trow$table_name[i]),
+                           tdata3 %>% as.data.frame)
+            
+            DBI::dbExecute(dbf,
+                           "INSERT INTO on_the_fly (key, table_name)
+                          VALUES($key, $table_name)",
+                           trow[i, ] %>% select(key, table_name) %>% as.data.frame)
+          }
+        }
+        
+        ##TODO:
+        previousPosition <- trow$position[i]
+        ##TODO: Not needed anymore: current.row <- current.row + 1
+        
+        # Read next row from the query
+        ##TODO: No need for this: trow <- DBI::dbFetch(tki, num.rows)
+        
+        
+        
       }
       
-      ##TODO:
-      previousPosition <- trow$position
-      current.row <- current.row + 1
       
-      # Read next row from the query
-      trow <- DBI::dbFetch(tki, num.rows)
+      
+      
+      
     }
     
     # Finish transaction
@@ -470,6 +493,7 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
     close(bin.con)
   }
 }
+
 
 # Read a file in a zip file onto memory
 #' @importFrom utils unzip

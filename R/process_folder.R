@@ -41,9 +41,11 @@
 #' \dontrun{process_input("WWSIS model.xml")}
 #'
 #' @export
-process_folder <- function(folders = ".", keep.temp = FALSE) {
+process_folder <- function(folders = ".", keep.temp = FALSE, periods = c(0:4), 
+                           export_setting_file = "", impute_missings = T) {
   # Check inputs
-  stopifnot(is.character(folders), is.logical(keep.temp), length(keep.temp) == 1L)
+  stopifnot(is.character(folders), is.logical(keep.temp), length(keep.temp) == 1L, 
+            is.character(export_setting_file), is.logical(impute_missings))
   check_is_folder(folders)
 
   # Check for wildcard
@@ -87,6 +89,17 @@ process_folder <- function(folders = ".", keep.temp = FALSE) {
             paste(folder.missing, collapse = ", "),
             call. = FALSE)
   }
+  
+  # Check if export setting file is valid
+  if(!grepl(".csv$", export_setting_file) | !file.exists(export_setting_file))
+    warning("Export setting file does not exist or it is not a valid csv file", call. = FALSE)
+  else{
+    export_settings <- read.csv(export_setting_file)
+    if(nrow(export_settings) <= 1 | any(colnames(export_settings) %out% c("table_name",	"collection", "property", "export")))
+      warning("Export setting file is not valid", call. = FALSE)
+    else
+      table_names <- export_settings$table_name[export_settings$export == "T"]
+  }
 
   # Create new id for identification on screen
   df2 <- df %>%
@@ -109,7 +122,7 @@ process_folder <- function(folders = ".", keep.temp = FALSE) {
         process_input(.$filename)
         data.frame()
       } else {
-        process_solution(.$filename, keep.temp)
+        process_solution(.$filename, keep.temp, periods = periods, table_names = table_names)
         data.frame()
       })
   } else {
@@ -118,7 +131,7 @@ process_folder <- function(folders = ".", keep.temp = FALSE) {
       if (df3$type == "I") {
         process_input(df3$filename)
       } else {
-        process_solution(df3$filename, keep.temp)
+        process_solution(df3$filename, keep.temp, periods = periods, table_names = table_names)
       }
     }
   }
