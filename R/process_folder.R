@@ -91,14 +91,16 @@ process_folder <- function(folders = ".", keep.temp = FALSE, periods = c(0:4),
   }
   
   # Check if export setting file is valid
-  if(!grepl(".csv$", export_setting_file) | !file.exists(export_setting_file))
+  if(!grepl(".csv$", export_setting_file) | !file.exists(export_setting_file)){
     warning("Export setting file does not exist or it is not a valid csv file", call. = FALSE)
-  else{
+  } else{
     export_settings <- read.csv(export_setting_file)
-    if(nrow(export_settings) <= 1 | any(colnames(export_settings) %out% c("table_name",	"collection", "property", "export")))
+    if(nrow(export_settings) <= 1 | 
+       any(colnames(export_settings) %out% c("table_name",	"collection", "property", "export"))){
       warning("Export setting file is not valid", call. = FALSE)
-    else
-      table_names <- export_settings$table_name[export_settings$export == "T"]
+    } else {
+      table_names <- export_settings$table_name[export_settings$export == T]
+    }
   }
 
   # Create new id for identification on screen
@@ -122,7 +124,7 @@ process_folder <- function(folders = ".", keep.temp = FALSE, periods = c(0:4),
         process_input(.$filename)
         data.frame()
       } else {
-        process_solution(.$filename, keep.temp, periods = periods, table_names = table_names)
+        process_solution(.$filename, keep.temp, periods, table_names, impute_missings)
         data.frame()
       })
   } else {
@@ -131,7 +133,7 @@ process_folder <- function(folders = ".", keep.temp = FALSE, periods = c(0:4),
       if (df3$type == "I") {
         process_input(df3$filename)
       } else {
-        process_solution(df3$filename, keep.temp, periods = periods, table_names = table_names)
+        process_solution(df3$filename, keep.temp, periods, table_names, impute_missings)
       }
     }
   }

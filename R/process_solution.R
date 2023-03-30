@@ -4,7 +4,9 @@
 #' @importFrom utils packageVersion unzip
 #' @export
 process_solution <- function(file, keep.temp = FALSE,
-                             periods = c(0:4), table_names = c("data_interval_Battery_AvailableSoC", "data_interval_Battery_Charging", "data_interval_Battery_Discharging", "data_interval_Battery_Energy", "data_interval_Battery_FOMCost", "data_interval_Battery_Generation", "data_interval_Battery_InstalledCapacity", "data_interval_Battery_Load", "data_interval_Battery_Losses", "data_interval_Battery_NetGeneration", "data_interval_Battery_SoC", "data_interval_Battery_VOMCost", "data_interval_Constraint_Activity", "data_interval_Constraint_HoursBinding", "data_interval_Constraint_PenaltyCost", "data_interval_Constraint_Price", "data_interval_Constraint_RHS", "data_interval_Constraint_Slack", "data_interval_Constraint_Violation", "data_interval_Emission_Production", "data_interval_EmissionGenerators_GenerationProduction", "data_interval_EmissionGenerators_UnitStartProduction", "data_interval_Fuel_Offtake", "data_interval_Fuel_TotalPrice", "data_interval_Generator_AvailableCapacity", "data_interval_Generator_AvailableEnergy", "data_interval_Generator_CapacityCurtailed", "data_interval_Generator_CapacityFactor", "data_interval_Generator_CurtailmentFactor", "data_interval_Generator_EnergyCurtailed", "data_interval_Generator_FuelOfftake", "data_interval_Generator_Generation", "data_interval_Generator_GenerationSentOut", "data_interval_Generator_HoursCurtailed", "data_interval_Generator_InstalledCapacity", "data_interval_Generator_MarginalLossFactor", "data_interval_Generator_MaxCapacity", "data_interval_Generator_NetGeneration", "data_interval_Generator_OfferPrice", "data_interval_Generator_OfferQuantity", "data_interval_Generator_PriceReceived", "data_interval_Generator_PumpLoad", "data_interval_Generator_RatedCapacity", "data_interval_Generator_Rating", "data_interval_Generator_SRMC", "data_interval_Generator_ServiceFactor", "data_interval_Generator_StartFuelOfftake", "data_interval_Generator_Units", "data_interval_Generator_VOMCost", "data_interval_GeneratorFuels_Offtake", "data_interval_GeneratorFuels_Price", "data_interval_Line_ExportLimit", "data_interval_Line_Flow", "data_interval_Line_FlowBack", "data_interval_Line_ImportLimit", "data_interval_Line_Loss", "data_interval_Line_NetFlow", "data_interval_Region_BatteryGeneration", "data_interval_Region_BatteryLoad", "data_interval_Region_DemandCurtailed", "data_interval_Region_DumpEnergy", "data_interval_Region_Exports", "data_interval_Region_Generation", "data_interval_Region_GenerationSentOut", "data_interval_Region_GeneratorAuxiliaryUse", "data_interval_Region_Imports", "data_interval_Region_Load", "data_interval_Region_NetGeneration", "data_interval_Region_NetInterchange", "data_interval_Region_PeakLoad", "data_interval_Region_Price", "data_interval_Region_PumpGeneration", "data_interval_Region_PumpLoad", "data_interval_Region_TransmissionLosses", "data_interval_Region_UnservedEnergy", "data_interval_Region_z")) {
+                             periods, 
+                             table_names,
+                             impute_missings) {
   if(is_otf_rplexos()){
     keep.temp <- T
   }
@@ -228,9 +230,9 @@ process_solution <- function(file, keep.temp = FALSE,
   
   # Add the data into the db
   if (is_otf_rplexos()){
-    add_data(file, dbt, dbf, add_tables = '')
+    add_data(file, dbt, dbf, add_tables = '', T, periods, table_names, impute_missings)
   } else {
-    add_data(file, dbt, dbf, add_tables = 'add_all', periods = periods, table_names = table_names)
+    add_data(file, dbt, dbf, add_tables = 'add_all', T, periods, table_names, impute_missings)
   }
   
   # Read Log file into memory
@@ -273,7 +275,7 @@ process_solution <- function(file, keep.temp = FALSE,
 }
 
 add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T,
-                     priods = c(0:4), table_names = c("data_interval_Battery_AvailableSoC", "data_interval_Battery_Charging", "data_interval_Battery_Discharging", "data_interval_Battery_Energy", "data_interval_Battery_FOMCost", "data_interval_Battery_Generation", "data_interval_Battery_InstalledCapacity", "data_interval_Battery_Load", "data_interval_Battery_Losses", "data_interval_Battery_NetGeneration", "data_interval_Battery_SoC", "data_interval_Battery_VOMCost", "data_interval_Constraint_Activity", "data_interval_Constraint_HoursBinding", "data_interval_Constraint_PenaltyCost", "data_interval_Constraint_Price", "data_interval_Constraint_RHS", "data_interval_Constraint_Slack", "data_interval_Constraint_Violation", "data_interval_Emission_Production", "data_interval_EmissionGenerators_GenerationProduction", "data_interval_EmissionGenerators_UnitStartProduction", "data_interval_Fuel_Offtake", "data_interval_Fuel_TotalPrice", "data_interval_Generator_AvailableCapacity", "data_interval_Generator_AvailableEnergy", "data_interval_Generator_CapacityCurtailed", "data_interval_Generator_CapacityFactor", "data_interval_Generator_CurtailmentFactor", "data_interval_Generator_EnergyCurtailed", "data_interval_Generator_FuelOfftake", "data_interval_Generator_Generation", "data_interval_Generator_GenerationSentOut", "data_interval_Generator_HoursCurtailed", "data_interval_Generator_InstalledCapacity", "data_interval_Generator_MarginalLossFactor", "data_interval_Generator_MaxCapacity", "data_interval_Generator_NetGeneration", "data_interval_Generator_OfferPrice", "data_interval_Generator_OfferQuantity", "data_interval_Generator_PriceReceived", "data_interval_Generator_PumpLoad", "data_interval_Generator_RatedCapacity", "data_interval_Generator_Rating", "data_interval_Generator_SRMC", "data_interval_Generator_ServiceFactor", "data_interval_Generator_StartFuelOfftake", "data_interval_Generator_Units", "data_interval_Generator_VOMCost", "data_interval_GeneratorFuels_Offtake", "data_interval_GeneratorFuels_Price", "data_interval_Line_ExportLimit", "data_interval_Line_Flow", "data_interval_Line_FlowBack", "data_interval_Line_ImportLimit", "data_interval_Line_Loss", "data_interval_Line_NetFlow", "data_interval_Region_BatteryGeneration", "data_interval_Region_BatteryLoad", "data_interval_Region_DemandCurtailed", "data_interval_Region_DumpEnergy", "data_interval_Region_Exports", "data_interval_Region_Generation", "data_interval_Region_GenerationSentOut", "data_interval_Region_GeneratorAuxiliaryUse", "data_interval_Region_Imports", "data_interval_Region_Load", "data_interval_Region_NetGeneration", "data_interval_Region_NetInterchange", "data_interval_Region_PeakLoad", "data_interval_Region_Price", "data_interval_Region_PumpGeneration", "data_interval_Region_PumpLoad", "data_interval_Region_TransmissionLosses", "data_interval_Region_UnservedEnergy", "data_interval_Region_z")){
+                     priods, table_names, impute_missings){
   if(is.null(dbt) | is.null(dbf)){
     # Database name will match that of the zip file
     db.temp <- get_dbtemp_name(file)
@@ -293,7 +295,7 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
   times <- get_times()
   
   # Add binary data
-  for (period in 0:4) {
+  for (period in periods) {
     # Check if binary file exists, otherwise, skip this period
     period.name <- ifelse(period == 0, "interval", times[period])
     bin.name <- sprintf("t_data_%s.BIN", period)
@@ -351,10 +353,12 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
       
       
       
+      qiles <- quantile(1:nrow(trow), seq(0, 1, by = 0.10))
       
       for(i in 1:nrow(trow)){
         
-        print(i)
+        if(i %in% qiles)
+          print(paste0("Period: ", period.name, ", Progress= ", names(qiles)[which(qiles == i)]))
         
         
         # Expand data
