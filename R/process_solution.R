@@ -188,31 +188,48 @@ process_solution <- function(file, keep.temp = FALSE,
   props <- DBI::dbGetQuery(dbf, sql)
   
   for (p in props$table_name) {
-    sql <- sprintf("CREATE TABLE '%s' (key INT, time_from INT, time_to INT, value DOUBLE)", p)
-    DBI::dbExecute(dbf, sql)
-    
-    view.name <- gsub("data_interval_", "", p)
-    sql <- sprintf("CREATE VIEW %s AS
-                  WITH RECURSIVE replicate(%s, value, d_time_from, d_time_to, n) AS (
-                    SELECT %s, d.value, d.time_from, d.time_to, d.time_from AS n
+    if(p %in% table_names){
+      sql <- sprintf("CREATE TABLE '%s' (key INT, time_from INT, time_to INT, value DOUBLE)", p)
+      DBI::dbExecute(dbf, sql)
+      
+      view.name <- gsub("data_interval_", "", p)
+      
+      if(impute_missings){
+        sql <- sprintf("CREATE VIEW %s AS
+                      WITH RECURSIVE replicate(%s, value, d_time_from, d_time_to, n) AS (
+                        SELECT %s, d.value, d.time_from, d.time_to, d.time_from AS n
+                        FROM %s d
+                        NATURAL JOIN key k
+                        WHERE k.table_name = '%s'
+                        UNION ALL
+                        SELECT %s, value, d_time_from, d_time_to, n+1
+                        FROM replicate
+                        WHERE n < d_time_to
+                      )
+                      
+                      SELECT %s, value, t1.time AS date_time 
+                      FROM replicate
+                      JOIN time t1
+                      	ON t1.interval = n
+                      		AND t1.phase_id = replicate.phase_id"
+                      , view.name, gsub("k.", "", view.k2), view.k2, p, p, 
+                      gsub("k.", "", view.k2), 
+                      gsub("phase_id", "replicate.phase_id", gsub("k.", "", view.k2)))
+      } else {
+        sql <- sprintf("CREATE VIEW %s AS
+                    SELECT %s, t1.time time_from, t2.time time_to, d.value
                     FROM %s d
                     NATURAL JOIN key k
-                    WHERE k.table_name = '%s'
-                    UNION ALL
-                    SELECT %s, value, d_time_from, d_time_to, n+1
-                    FROM replicate
-                    WHERE n < d_time_to
-                  )
-                  
-                  SELECT %s, value, t1.time AS date_time 
-                  FROM replicate
-                  JOIN time t1
-                  	ON t1.interval = n
-                  		AND t1.phase_id = replicate.phase_id"
-                  , view.name, gsub("k.", "", view.k2), view.k2, p, p, 
-                  gsub("k.", "", view.k2), 
-                  gsub("phase_id", "replicate.phase_id", gsub("k.", "", view.k2)))
-    DBI::dbExecute(dbf, sql)
+                    JOIN time t1
+                      ON t1.interval = d.time_from
+                     AND t1.phase_id = k.phase_id
+                    JOIN time t2
+                      ON t2.interval = d.time_to
+                     AND t2.phase_id = k.phase_id
+                    WHERE k.table_name = '%s'", view.name, view.k2, p, p);
+      }
+      DBI::dbExecute(dbf, sql)
+    }
   }
   
   # Create table for list of properties
