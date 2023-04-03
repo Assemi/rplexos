@@ -1,0 +1,77 @@
+table_name,collection,property,export
+data_interval_Battery_AvailableSoC,Battery,Available SoC,F
+data_interval_Battery_Charging,Battery,Charging,F
+data_interval_Battery_Discharging,Battery,Discharging,F
+data_interval_Battery_Energy,Battery,Energy,F
+data_interval_Battery_FOMCost,Battery,FO&M Cost,F
+data_interval_Battery_Generation,Battery,Generation,F
+data_interval_Battery_InstalledCapacity,Battery,Installed Capacity,F
+data_interval_Battery_Load,Battery,Load,F
+data_interval_Battery_Losses,Battery,Losses,F
+data_interval_Battery_NetGeneration,Battery,Net Generation,F
+data_interval_Battery_SoC,Battery,SoC,F
+data_interval_Battery_VOMCost,Battery,VO&M Cost,F
+data_interval_Constraint_Activity,Constraint,Activity,F
+data_interval_Constraint_HoursBinding,Constraint,Hours Binding,F
+data_interval_Constraint_PenaltyCost,Constraint,Penalty Cost,F
+data_interval_Constraint_Price,Constraint,Price,F
+data_interval_Constraint_RHS,Constraint,RHS,F
+data_interval_Constraint_Slack,Constraint,Slack,F
+data_interval_Constraint_Violation,Constraint,Violation,F
+data_interval_Emission_Production,Emission,Production,F
+data_interval_EmissionGenerators_GenerationProduction,Emission.Generators,Generation Production,F
+data_interval_EmissionGenerators_UnitStartProduction,Emission.Generators,Unit Start Production,F
+data_interval_Fuel_Offtake,Fuel,Offtake,F
+data_interval_Fuel_TotalPrice,Fuel,Total Price,F
+data_interval_Generator_AvailableCapacity,Generator,Available Capacity,T
+data_interval_Generator_AvailableEnergy,Generator,Available Energy,F
+data_interval_Generator_CapacityCurtailed,Generator,Capacity Curtailed,F
+data_interval_Generator_CapacityFactor,Generator,Capacity Factor,F
+data_interval_Generator_CurtailmentFactor,Generator,Curtailment Factor,F
+data_interval_Generator_EnergyCurtailed,Generator,Energy Curtailed,F
+data_interval_Generator_FuelOfftake,Generator,Fuel Offtake,F
+data_interval_Generator_Generation,Generator,Generation,T
+data_interval_Generator_GenerationSentOut,Generator,Generation Sent Out,T
+data_interval_Generator_HoursCurtailed,Generator,Hours Curtailed,F
+data_interval_Generator_InstalledCapacity,Generator,Installed Capacity,F
+data_interval_Generator_MarginalLossFactor,Generator,Marginal Loss Factor,F
+data_interval_Generator_MaxCapacity,Generator,Max Capacity,F
+data_interval_Generator_NetGeneration,Generator,Net Generation,F
+data_interval_Generator_OfferPrice,Generator,Offer Price,F
+data_interval_Generator_OfferQuantity,Generator,Offer Quantity,F
+data_interval_Generator_PriceReceived,Generator,Price Received,F
+data_interval_Generator_PumpLoad,Generator,Pump Load,F
+data_interval_Generator_RatedCapacity,Generator,Rated Capacity,F
+data_interval_Generator_Rating,Generator,Rating,F
+data_interval_Generator_SRMC,Generator,SRMC,F
+data_interval_Generator_ServiceFactor,Generator,Service Factor,F
+data_interval_Generator_StartFuelOfftake,Generator,Start Fuel Offtake,F
+data_interval_Generator_Units,Generator,Units,F
+data_interval_Generator_VOMCost,Generator,VO&M Cost,F
+data_interval_GeneratorFuels_Offtake,Generator.Fuels,Offtake,F
+data_interval_GeneratorFuels_Price,Generator.Fuels,Price,F
+data_interval_Line_ExportLimit,Line,Export Limit,F
+data_interval_Line_Flow,Line,Flow,F
+data_interval_Line_FlowBack,Line,Flow Back,F
+data_interval_Line_ImportLimit,Line,Import Limit,F
+data_interval_Line_Loss,Line,Loss,F
+data_interval_Line_NetFlow,Line,Net Flow,F
+data_interval_Region_BatteryGeneration,Region,Battery Generation,F
+data_interval_Region_BatteryLoad,Region,Battery Load,F
+data_interval_Region_DemandCurtailed,Region,Demand Curtailed,F
+data_interval_Region_DumpEnergy,Region,Dump Energy,F
+data_interval_Region_Exports,Region,Exports,F
+data_interval_Region_Generation,Region,Generation,F
+data_interval_Region_GenerationSentOut,Region,Generation Sent Out,F
+data_interval_Region_GeneratorAuxiliaryUse,Region,Generator Auxiliary Use,F
+data_interval_Region_Imports,Region,Imports,F
+data_interval_Region_Load,Region,Load,F
+data_interval_Region_NetGeneration,Region,Net Generation,F
+data_interval_Region_NetInterchange,Region,Net Interchange,F
+data_interval_Region_PeakLoad,Region,Peak Load,F
+data_interval_Region_Price,Region,Price,F
+data_interval_Region_PumpGeneration,Region,Pump Generation,F
+data_interval_Region_PumpLoad,Region,Pump Load,F
+data_interval_Region_TransmissionLosses,Region,Transmission Losses,F
+data_interval_Region_UnservedEnergy,Region,Unserved Energy,F
+data_interval_Region_z,Region,z,F

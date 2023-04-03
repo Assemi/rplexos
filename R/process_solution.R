@@ -3,7 +3,10 @@
 #' @useDynLib rplexos
 #' @importFrom utils packageVersion unzip
 #' @export
-process_solution <- function(file, keep.temp = FALSE) {
+process_solution <- function(file, keep.temp = FALSE,
+                             periods, 
+                             table_names,
+                             impute_missings) {
   if(is_otf_rplexos()){
     keep.temp <- T
   }
@@ -185,22 +188,48 @@ process_solution <- function(file, keep.temp = FALSE) {
   props <- DBI::dbGetQuery(dbf, sql)
   
   for (p in props$table_name) {
-    sql <- sprintf("CREATE TABLE '%s' (key INT, time_from INT, time_to INT, value DOUBLE)", p)
-    DBI::dbExecute(dbf, sql)
-    
-    view.name <- gsub("data_interval_", "", p)
-    sql <- sprintf("CREATE VIEW %s AS
-                  SELECT %s, t1.time time_from, t2.time time_to, d.value
-                  FROM %s d
-                  NATURAL JOIN key k
-                  JOIN time t1
-                    ON t1.interval = d.time_from
-                   AND t1.phase_id = k.phase_id
-                  JOIN time t2
-                    ON t2.interval = d.time_to
-                   AND t2.phase_id = k.phase_id
-                  WHERE k.table_name = '%s'", view.name, view.k2, p, p);
-    DBI::dbExecute(dbf, sql)
+    if(p %in% table_names){
+      sql <- sprintf("CREATE TABLE '%s' (key INT, time_from INT, time_to INT, value DOUBLE)", p)
+      DBI::dbExecute(dbf, sql)
+      
+      view.name <- gsub("data_interval_", "", p)
+      
+      if(impute_missings){
+        sql <- sprintf("CREATE VIEW %s AS
+                      WITH RECURSIVE replicate(%s, value, d_time_from, d_time_to, n) AS (
+                        SELECT %s, d.value, d.time_from, d.time_to, d.time_from AS n
+                        FROM %s d
+                        NATURAL JOIN key k
+                        WHERE k.table_name = '%s'
+                        UNION ALL
+                        SELECT %s, value, d_time_from, d_time_to, n+1
+                        FROM replicate
+                        WHERE n < d_time_to
+                      )
+                      
+                      SELECT %s, value, t1.time AS date_time 
+                      FROM replicate
+                      JOIN time t1
+                      	ON t1.interval = n
+                      		AND t1.phase_id = replicate.phase_id"
+                      , view.name, gsub("k.", "", view.k2), view.k2, p, p, 
+                      gsub("k.", "", view.k2), 
+                      gsub("phase_id", "replicate.phase_id", gsub("k.", "", view.k2)))
+      } else {
+        sql <- sprintf("CREATE VIEW %s AS
+                    SELECT %s, t1.time time_from, t2.time time_to, d.value
+                    FROM %s d
+                    NATURAL JOIN key k
+                    JOIN time t1
+                      ON t1.interval = d.time_from
+                     AND t1.phase_id = k.phase_id
+                    JOIN time t2
+                      ON t2.interval = d.time_to
+                     AND t2.phase_id = k.phase_id
+                    WHERE k.table_name = '%s'", view.name, view.k2, p, p);
+      }
+      DBI::dbExecute(dbf, sql)
+    }
   }
   
   # Create table for list of properties
@@ -227,9 +256,9 @@ process_solution <- function(file, keep.temp = FALSE) {
   
   # Add the data into the db
   if (is_otf_rplexos()){
-    add_data(file, dbt, dbf, add_tables = '')
+    add_data(file, dbt, dbf, add_tables = '', T, periods, table_names, impute_missings)
   } else {
-    add_data(file, dbt, dbf, add_tables = 'add_all')
+    add_data(file, dbt, dbf, add_tables = 'add_all', T, periods, table_names, impute_missings)
   }
   
   # Read Log file into memory
@@ -271,7 +300,8 @@ process_solution <- function(file, keep.temp = FALSE) {
   invisible(db.name)
 }
 
-add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T){
+add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T,
+                     priods, table_names, impute_missings){
   if(is.null(dbt) | is.null(dbf)){
     # Database name will match that of the zip file
     db.temp <- get_dbtemp_name(file)
@@ -291,7 +321,7 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
   times <- get_times()
   
   # Add binary data
-  for (period in 0:4) {
+  for (period in periods) {
     # Check if binary file exists, otherwise, skip this period
     period.name <- ifelse(period == 0, "interval", times[period])
     bin.name <- sprintf("t_data_%s.BIN", period)
@@ -317,19 +347,19 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
     
     # Read t_key_index entries for period data
     sql <- sprintf("SELECT nk.[key], nk.phase_id, nk.table_name, tki.position, tki.period_offset, tki.length
-                   FROM t_key_index tki
-                   JOIN temp_key nk
-                   ON tki.key_id = nk.[key]
-                   WHERE tki.period_type_id = %s
-                   ORDER BY tki.position", period)
+                 FROM t_key_index tki
+                 JOIN temp_key nk
+                 ON tki.key_id = nk.[key]
+                 WHERE tki.period_type_id = %s
+                 ORDER BY tki.position", period)
     tki <- DBI::dbSendQuery(dbt, sql)
     
     # All the data is inserted in one transaction
     DBI::dbBegin(dbf)
     
     # Read one row from the query
-    num.rows <- 1##TODO: ifelse(period == 0, 1, 1000)
-    current.row <- 1
+    num.rows <- -1 ##TODO: Fetching all rows #instead of: ifelse(period == 0, 1, 1000)
+    ##TODO: Not needed anymore: current.row <- 1
     trow <- DBI::dbFetch(tki, num.rows)
     num.read <- 0
     
@@ -337,124 +367,147 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
     byte_offset <- 0 # will be used to seek in the results when not all the data is used.
     previousPosition <- -1
     bytes_skipped <- F # as long as this is false, readBin will be used. If bytes are skipped, read_zip() will be used. Each loop reads a new file.
-    while (nrow(trow) > 0) {
-      print(paste0(current.row, ": ", paste(trow, collapse = ", ")))
-      ##TODO: byte_offset <- trow$position 
-      # Fix length if necessary
+    if (nrow(trow) > 0) {
+      ##TODO: print(paste0(current.row, ": ", paste(trow, collapse = ", ")))
+      ##TODO: Updated: byte_offset <- trow$position 
+      ##TODO: Not sure about this: Fix length if necessary
       if (!correct.length){
         trow <- trow %>% mutate(length = length - period_offset)
         print("Not correct length!")
       }
       
-      # Expand data
-      tdata <- trow %>%
-        select(key_id = key, phase_id, period_offset, length) %>%
-        expand_tkey
       
-      # Skip table if it is not present in add_tables
-      if(period == 0){ # other periods will be loaded anyway
-        if(all(add_tables != 'add_all')){ # only true if all the add_tables entries equal 'add_all'
-          # a table can never be skipped if all tables should be added
-          # add_tables = '' for no tables, add_tables = 'add_all' for all tables
-          if (all(trow$table_name %out% add_tables)){ # only true if all the table names are outside of add_tables
-            print("all(add_tables != 'add_all')")
-            byte_offset <- byte_offset + sum(trow$length) * 8L
-            bytes_skipped <- T
-            print("bytes_skipped <- T")
-            trow <- DBI::dbFetch(tki, num.rows)
-            next
+      
+      
+      qiles <- quantile(1:nrow(trow), seq(0, 1, by = 0.10))
+      
+      for(i in 1:nrow(trow)){
+        
+        if(i %in% qiles)
+          print(paste0("Period: ", period.name, ", Progress= ", names(qiles)[which(qiles == i)]))
+        
+        
+        # Expand data
+        tdata <- trow[i, ] %>%
+          select(key_id = key, phase_id, period_offset, length) %>%
+          expand_tkey
+        
+        # Skip table if it is not present in add_tables
+        if(period == 0){ # other periods will be loaded anyway
+          if(all(add_tables != 'add_all')){ ##TODO: Not sure about this: # only true if all the add_tables entries equal 'add_all'
+            # a table can never be skipped if all tables should be added
+            # add_tables = '' for no tables, add_tables = 'add_all' for all tables
+            if (all(trow$table_name[i] %out% add_tables)){ # only true if all the table names are outside of add_tables
+              print("all(add_tables != 'add_all')")
+              byte_offset <- byte_offset + sum(trow$length[i]) * 8L
+              bytes_skipped <- T
+              print("bytes_skipped <- T")
+              ###TODO: Not needed anymore: trow <- DBI::dbFetch(tki, num.rows)
+              next
+            }
           }
         }
-      }
-      
-      if(!bytes_skipped){
-        # Query data
-        byte_offset <- byte_offset + sum(trow$length) * 8L
-        ##TODO: byte_offset <- trow$position
-        if(trow$position != previousPosition)
-          value.data <- readBin(bin.con,
-                                "double",
-                                n = nrow(tdata),
-                                size = 8L,
-                                endian = "little")
-      }else{
-        ##TODO:
-        byte_offset = trow$position
-        print("bytes_skipped")
         
-        value.data <- read_zip(file, 
-                               bin.name, 
-                               what = "double", 
-                               offset = byte_offset, 
-                               n = nrow(tdata), 
-                               size = 8L, 
-                               endian = "little")
-        byte_offset <- byte_offset + sum(trow$length) * 8L
-      }
-      num.read <- num.read + length(value.data)
-      
-      # Check the size of data (they won't match if there is a problem)
-      if (length(value.data) < nrow(tdata)) {
-        rplexos_message("   ", num.read, " values read")
-        stop("Problem reading ", period.name, " binary data (reached end of file).\n",
-             "  ", nrow(tdata), " values requested, ", length(value.data), " returned.\n",
-             "  This is likely a bug in rplexos. Please report it.", call. = FALSE)
-      }
-      
-      # Copy data
-      tdata$value <- value.data
-      
-      # Join with time
-      tdata2 <- tdata %>%
-        inner_join(t.time, by = c("phase_id", "period_id"))
-      
-      # Add data to SQLite
-      if (period > 0) {
-        tdata3 <- tdata2 %>% select(key, time, value)
-        table_otf <- paste0('data_',times[period],gsub('data_interval','',trow$table_name))
-        table_otf <- paste0('data_',times[period])
-        # tables_otf_done <- collect(tbl(dbf, 'on_the_fly'), n = Inf)
-        # 
-        # if(!(table_otf %in% tables_otf_done$table_name)){
-        if(initial){
+        if(!bytes_skipped){
+          # Query data
+          byte_offset <- byte_offset + sum(trow$length[i]) * 8L
+          ##TODO: byte_offset <- trow$position
+          if(trow$position[i] != previousPosition)
+            value.data <- readBin(bin.con,
+                                  "double",
+                                  n = nrow(tdata[tdata$key == trow$key[i], ]),
+                                  size = 8L,
+                                  endian = "little")
+        }else{
+          ##TODO:
+          byte_offset = trow$position[i]
+          print("bytes_skipped")
           
-          DBI::dbExecute(dbf,
-                         sprintf("INSERT INTO data_%s VALUES($key, $time, $value)", times[period]),
-                         tdata3 %>% as.data.frame)
-          
-          table_data <- trow %>% select(key, table_name) %>% as.data.frame
-          table_data$table_name <- table_otf
-          DBI::dbExecute(dbf,
-                         "INSERT INTO on_the_fly (key, table_name)
-                          VALUES($key, $table_name)",
-                         table_data)
+          value.data <- read_zip(file, 
+                                 bin.name, 
+                                 what = "double", 
+                                 offset = byte_offset, 
+                                 n = nrow(tdata[tdata$key == trow$key[i], ]),
+                                 size = 8L, 
+                                 endian = "little")
+          byte_offset <- byte_offset + sum(trow$length) * 8L
         }
-      } else {
-        # Eliminate consecutive repeats
-        default.interval.to.id <- max(tdata2$interval_id)
-        tdata3 <- tdata2 %>%
-          arrange(interval_id) %>%
-          filter(value != lag(value, default = Inf)) %>%
-          mutate(interval_to_id = lead(interval_id - 1, default = default.interval.to.id)) %>%
-          select(key, time_from = interval_id, time_to = interval_to_id, value)
+        num.read <- num.read + length(value.data)
         
-        DBI::dbExecute(dbf,
-                       sprintf("INSERT INTO %s (key, time_from, time_to, value)
-                             VALUES($key, $time_from, $time_to, $value)", trow$table_name),
-                       tdata3 %>% as.data.frame)
+        # Check the size of data (they won't match if there is a problem)
+        if (length(value.data) < nrow(tdata[tdata$key == trow$key[i], ])) {
+          rplexos_message("   ", num.read, " values read")
+          stop("Problem reading ", period.name, " binary data (reached end of file).\n",
+               "  ", nrow(tdata[tdata$key == trow$key[i], ]), 
+               " values requested, ", length(value.data), " returned.\n",
+               "  This is likely a bug in rplexos. Please report it.", call. = FALSE)
+        }
         
-        DBI::dbExecute(dbf,
-                       "INSERT INTO on_the_fly (key, table_name)
-                        VALUES($key, $table_name)",
-                       trow %>% select(key, table_name) %>% as.data.frame)
+        # Copy data
+        tdata$value[tdata$key == trow$key[i]] <- value.data
+        
+        # Join with time
+        tdata2 <- tdata %>%
+          inner_join(t.time, by = c("phase_id", "period_id"))
+        
+        # Add data to SQLite if table is selected for export
+        if(trow$table_name[i] %in% table_names){
+          if (period > 0) {
+            tdata3 <- tdata2 %>% select(key, time, value)
+            table_otf <- paste0('data_',times[period],gsub('data_interval','',trow$table_name[i]))
+            table_otf <- paste0('data_',times[period])
+            # tables_otf_done <- collect(tbl(dbf, 'on_the_fly'), n = Inf)
+            # 
+            # if(!(table_otf %in% tables_otf_done$table_name)){
+            if(initial){
+              
+              DBI::dbExecute(dbf,
+                             sprintf("INSERT INTO data_%s VALUES($key, $time, $value)", times[period]),
+                             tdata3 %>% as.data.frame)
+              
+              table_data <- trow %>% select(key, table_name) %>% as.data.frame
+              table_data$table_name <- table_otf
+              DBI::dbExecute(dbf,
+                             "INSERT INTO on_the_fly (key, table_name)
+                            VALUES($key, $table_name)",
+                             table_data)
+            }
+          } else {
+            # Eliminate consecutive repeats
+            default.interval.to.id <- max(tdata2$interval_id)
+            tdata3 <- tdata2 %>%
+              arrange(interval_id) %>%
+              filter(value != lag(value, default = Inf)) %>%
+              mutate(interval_to_id = lead(interval_id - 1, default = default.interval.to.id)) %>%
+              select(key, time_from = interval_id, time_to = interval_to_id, value)
+            
+            DBI::dbExecute(dbf,
+                           sprintf("INSERT INTO %s (key, time_from, time_to, value)
+                               VALUES($key, $time_from, $time_to, $value)", trow$table_name[i]),
+                           tdata3 %>% as.data.frame)
+            
+            DBI::dbExecute(dbf,
+                           "INSERT INTO on_the_fly (key, table_name)
+                          VALUES($key, $table_name)",
+                           trow[i, ] %>% select(key, table_name) %>% as.data.frame)
+          }
+        }
+        
+        ##TODO:
+        previousPosition <- trow$position[i]
+        ##TODO: Not needed anymore: current.row <- current.row + 1
+        
+        # Read next row from the query
+        ##TODO: No need for this: trow <- DBI::dbFetch(tki, num.rows)
+        
+        
+        
       }
       
-      ##TODO:
-      previousPosition <- trow$position
-      current.row <- current.row + 1
       
-      # Read next row from the query
-      trow <- DBI::dbFetch(tki, num.rows)
+      
+      
+      
     }
     
     # Finish transaction
@@ -470,6 +523,7 @@ add_data <- function(file, dbt=NULL, dbf=NULL, add_tables='add_all', initial = T
     close(bin.con)
   }
 }
+
 
 # Read a file in a zip file onto memory
 #' @importFrom utils unzip
